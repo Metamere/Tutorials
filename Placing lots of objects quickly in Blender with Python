@@ -1,0 +1,228 @@
+import bpy
+import pandas as pd
+import numpy as np
+import random
+from datetime import datetime
+from datetime import date
+import time
+import math
+import mathutils
+
+
+import bmesh
+from mathutils import Vector, Matrix
+
+# -------------------------------------------
+
+objects = bpy.data.objects
+context = bpy.context
+scene = context.scene
+
+#assert len(bpy.data.materials) >= 2
+matls_list = bpy.data.materials
+box_matls = []
+box_names = []
+
+#df = pd.DataFrame({})
+
+#df.to_numpy()
+
+#print(len(bpy.data.collections["MARKER"].all_objects))
+
+def set_edge_weights(Obj,world=False,threshold=0):
+    #changes beveled shape into a simple prism by removing bevels from top and bottom edges
+    OWMatrix = Obj.matrix_world
+    me = Obj.data
+    me.use_customdata_edge_bevel = True
+
+    for edge in me.edges :
+        v0 = edge.vertices[0]
+        v1 = edge.vertices[1]
+        if world:
+            v0Pos = OWMatrix @ me.vertices[v0].co
+            v1Pos = OWMatrix @ me.vertices[v1].co
+        else:
+            v0Pos = me.vertices[v0].co
+            v1Pos = me.vertices[v1].co
+        if abs(v0Pos[0]-v1Pos[0]) + abs(v0Pos[1]-v1Pos[1]) <= threshold:
+            edge.bevel_weight = 1.0
+        else:
+            edge.bevel_weight = 0.0
+
+
+def base_object(name):
+    bpy.ops.mesh.primitive_cube_add(location=(-100,-100,0))
+    base = bpy.context.object
+    base.name = name
+    
+    bpy.ops.object.modifier_add(type='BEVEL')
+    bev = bpy.context.object.modifiers["Bevel"]
+    bev.offset_type = 'DEPTH'
+#    bev.width = random.uniform(.03,.09)*6
+    bev.limit_method = 'WEIGHT'
+    bev.segments = 15
+    set_edge_weights(base)
+#    base.data.materials.append(matl)
+#    bpy.ops.object.hide_view_set
+    
+    return
+
+def clear_collection(collection_name):
+        
+    if len(bpy.data.collections[collection_name].all_objects) == 0: return
+    for obj in bpy.data.collections[collection_name].all_objects:
+        obj.select_set(True)
+    bpy.ops.object.delete()
+        
+    for item in bpy.data.meshes:
+        bpy.data.meshes.remove(item)
+    return    
+
+def object_creation(number,low_level=True):
+
+#    mesh = obj.data
+#    mesh.materials.append(random.choice(matls_list))
+    
+#    purple = bpy.data.materials.new("Purple")
+#    purple.diffuse_color = (1.0, 0, 1.0)
+
+    base_object("init_box")
+    
+
+    count, count2 = 0,0
+    for i in range(number):
+        for j in range(number):
+#            obj_name = "init_box_" + str(count)
+            matl = matls_list[count]
+            if low_level:
+                if matl in box_matls:
+    #                obj = scene.objects[obj_name]
+#                    obj2 = scene.objects["box_" + str(count)].copy()
+                    obj2 = objects[box_names[box_matls.index(matl)]].copy()
+                    obj2.name = "box_" + str(count) + "_" + str(count2)
+                else:
+                    box_matls.append(matl)
+    #                obj_name = name + "_" + str(count)
+    #                if obj_name not in box_names
+#                    obj = objects["init_box"]
+#                    obj2 = obj.copy()
+                    obj2 = objects["init_box"].copy()
+                    mesh = obj2.data
+                    obj2.data = mesh.copy() # use this when a new material needs to be assigned.
+                    obj2.data.materials.append(matl)
+                    obj2.name = "box_" + str(count)
+                    box_names.append(obj2.name)
+#                    obj2.modifiers["Bevel"].width = random.uniform(.03,.09)*6
+                    
+                    
+    #                obj.hide_viewport = True
+    #                mesh.data.materials.append(matl)
+            else:
+                bpy.ops.mesh.primitive_cube_add(location=(-100,-100,0))
+                obj2 = bpy.context.object
+                obj2.name = "box_" + str(count) + "_" + str(count2) # str(random.randint(0,10000000000))#
+                obj2.data.materials.append(matl)
+                
+            count += 1
+            count2 += 1
+            if count == len(matls_list): count = 0
+                
+            
+            obj2.location = (i, j, 0)
+            obj2.scale = (random.uniform(.4,.5),random.uniform(.4,.5),random.uniform(.25,2))
+            
+            
+            obj2.modifiers["Bevel"].width = random.uniform(.03,.09)*6
+            
+#            mesh.materials.append(random.choice(matls_list))
+                
+            if low_level: bpy.data.collections["MARKER"].objects.link(obj2)
+            
+    bpy.ops.object.select_all(action='DESELECT')
+#    objects["init_box"].select_set(True)
+#    bpy.ops.object.delete(use_global=False, confirm=False)
+    return
+
+cleanup_start_time = time.time()
+
+#clear_collection("MARKER")
+bpy.ops.object.select_by_type(type='MESH')
+bpy.ops.object.delete(use_global=False, confirm=False)
+for item in bpy.data.meshes:
+    bpy.data.meshes.remove(item)
+        
+cleanup_time = time.time() - cleanup_start_time
+num = 10
+
+print(f"cleanup: {round(cleanup_time,3)} s total, {round(cleanup_time/(num*num)*1000,1)} ms per object ")
+
+generation_start_time = time.time()
+
+#object_creation(num, True)
+#num = num*num
+
+bm = bmesh.new()
+
+num2 = 0
+x = -num/2
+while x <= num/2:
+    y = -num/2
+    while y <= num/2:
+    #    z = x / 2
+        ratio = math.sqrt(x*x + y*y)/(num/1.4)
+        z = 0
+#        mat = Matrix.Translation(loc)
+#        orig = Matrix()
+#        orig = Matrix.identity() #Translation(Vector((0, 0, 0)))
+#        inv_mat = mat.copy()
+#        inv_mat.invert() 
+        loc = Vector((x, y, z))
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=random.randint(3,8), 
+            radius1=.5, #max(.5,min(1,1.4-ratio)),
+            radius2=.5, #max(.1,min(.5,.7-ratio)),
+            depth=max(.1,5*(1-ratio)), matrix=Matrix())
+    
+        mesh = bpy.data.meshes.new("Bmesh_" + str(num2))
+        bm.to_mesh(mesh)
+        bm.free()
+        obj = bpy.data.objects.new("Bmesh_" + str(num2), mesh)
+        obj.location = loc
+        bpy.data.collections["MARKER"].objects.link(obj)
+        mesh.materials.append(random.choice(matls_list[int(1+6*ratio):int(15-6*ratio)]))
+        
+#        object = bpy.data.objects['Cube']
+#        modifier = object.modifiers.new(name="Remesh", type='REMESH')
+        
+#        objects[obj.name].select_set(True)
+        
+        
+#        bpy.ops.object.modifier_add(type='BEVEL')
+#        bev = bpy.context.object.modifiers["Bevel"]
+        bev = obj.modifiers.new(name="Bevel", type='BEVEL')
+        
+        bev.offset_type = 'DEPTH'
+        bev.width = random.uniform(.03,.09)*1
+        bev.limit_method = 'WEIGHT'
+        bev.segments = 15
+        set_edge_weights(obj)
+        
+        
+        
+        y += 1
+        num2 += 1
+    x += 1
+    
+#me = bpy.data.meshes.new("Cube Bmesh")
+#bm.to_mesh(me)
+#ob = bpy.data.objects.new("Cubes", me)
+#bpy.data.collections["MARKER"].objects.link(ob)
+num = num2
+
+bpy.ops.object.select_all(action='DESELECT')
+#scene.objects.link(ob)
+#bpy.context.scene.update()
+
+generation_time = round(time.time() - generation_start_time,4)
+print(f"generation: {round(generation_time,4)} s total, {round(generation_time/num*1000,2)} ms per object \n")
+
